@@ -1,0 +1,16 @@
+-
+  hosts: webserver
+  tasks:
+    -
+      package:
+        name: apache2
+        state: present
+    -
+      copy:
+        dest: /var/www/html/code.html
+        src: code.html
+    -
+      name: "Restart Apache"
+      service:
+        name: apache2
+        state: restarted

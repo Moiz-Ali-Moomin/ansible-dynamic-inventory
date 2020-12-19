@@ -1,0 +1,127 @@
+--- 
+- 
+  gather_facts: true
+  hosts: managed_node
+  ignore_errors: true
+  vars_prompt:
+    -
+      name: imageName
+      prompt: "Name Of your Image"
+    -
+      name: containerName
+      prompt: "Name Of your Container"
+  name: "Install and configure Docker"
+  tasks: 
+    - 
+      file: 
+        mode: "0755"
+        path: /dvd
+        state: directory
+      name: "Repo mount_folder creation"
+    - 
+      mount: 
+        fstype: iso9660
+        opts: "ro,loop"
+        path: /dvd/
+        src: /dev/cdrom
+        state: mounted
+      name: mount_dvd
+    - 
+      name: yum_repo_BaseOS
+      yum_repository: 
+        baseurl: "file:///dvd/BaseOS"
+        description: Local_baseos
+        file: dvd1
+        gpgcheck: false
+        name: BaseOS
+    - 
+      name: yum_repo_AppStream
+      yum_repository: 
+        baseurl: "file:///dvd/AppStream"
+        description: Local_appstream
+        file: dvd2
+        gpgcheck: false
+        name: AppStream
+    - 
+      name: Docker
+      yum_repository: 
+        baseurl: "https://download.docker.com/linux/centos/7/x86_64/stable/"
+        description: "docker YUM repo"
+        gpgcheck: false
+        name: docker
+    -
+      name: Disabling firewall
+      command: "systemctl stop firewalld"
+    
+    - 
+      package: 
+        name: docker-ce-18.09.1-3.el7.x86_64
+        state: present
+    - 
+      name: "Install Docker Module for Python"
+      pip: 
+        name: docker-py
+    - 
+      service: 
+        name: docker
+        state: started
+
+    - 
+      copy: 
+        dest: "/root/{{ item }}"
+        src: "{{ item }}"
+      loop: 
+        - dockerfile
+        - sshd_config  
+      name: "copying dockerfile on managed node"
+    - 
+      docker_image: 
+        build: 
+          path: /root
+        name: "{{imageName}}"
+        source: build
+      name: "creating image from dockerfile with ssh enabling"
+    - 
+      block: 
+        - 
+          command: "docker run -itd --name {{containerName}} -p 5253:22 {{imageName}}"
+          name: "checking container is running or not"
+      rescue: 
+        - 
+          debug: 
+            msg: "the containing is already running or change port number"
+    - 
+      command: "docker inspect {{containerName}}"
+      register: "y"
+    - 
+      command: "docker inspect {{containerName}}"
+      name: "taking ip of docker"
+
+    - 
+      name: Get ip of docker contianer
+      shell: "docker inspect {{containerName}} --format '{''{ .NetworkSettings.IPAddress }''}'"
+      register: consul_ip
+    
+    -  
+      debug: msg="{{ consul_ip.stdout }}"
+
+    - 
+      template: 
+        dest: /root/host.txt
+        src: "ip_fetch.j2"
+    - 
+      fetch: 
+        dest: "/home/hacker/task14.2/host.txt"
+        flat: true
+        src: /root/host.txt
+-
+  name: Copy docker contianer IP to host file 
+  hosts: localhost
+  tasks: 
+    - 
+      shell: "cat /home/hacker/task14.2/host.txt>>/etc/ansible/hosts/ansible-hosts.txt"
+
+#if you have remote ssh connection problem use the below command by changing IP and port
+#    -
+#      shell: "ssh-keygen -f "/home/hacker/.ssh/known_hosts" -R "[192.168.182.130]:5253"
+      
